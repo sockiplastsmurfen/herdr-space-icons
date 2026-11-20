@@ -10,6 +10,26 @@ const MOD = "spaces-icons";
 // What people picked, by space id: false for the letter, a path (on the space's machine) for a file.
 export const CHOICE = "spaces-icons.choice";
 const MAX_SHOWN = 12;
+// The tile behind an icon, by space id: "none", a #hex, or a palette name. Default white.
+export const TILE = "spaces-icons.tile";
+// Herdr's avatar colors (as in its spaces and picker mods), then the extra tile choices.
+const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
+const TILES = ["none", "#ffffff", "#1f2329", ...Object.keys(MARK)];
+const LETTERS = Object.keys(MARK);
+
+function hex(c, t) {
+  return c.startsWith("#") ? c : (MARK[c] ?? t[c] ?? "#ffffff");
+}
+
+// The tile color to draw behind a space's icon, or null for none.
+export function tileOf(id, t) {
+  const c = (shared(TILE) ?? {})[id] ?? "#ffffff";
+  return c === "none" ? null : hex(c, t);
+}
+
+function setIn(key, id, value) {
+  setShared(key, { ...(shared(key) ?? {}), [id]: value });
+}
 
 export function choiceOf(id) {
   return (shared(CHOICE) ?? {})[id];
@@ -106,7 +126,7 @@ function chooseItem(v, i) {
   const it = menuItems(v.spaceId, v.git)[i];
   if (!it) return;
   close();
-  if (it[1] === "icon") openOverlay({ mod: MOD, kind: "dialog", width: 470, height: 420, props: { mode: "icon", space: v.spaceId } });
+  if (it[1] === "icon") openOverlay({ mod: MOD, kind: "dialog", width: 470, height: 470, props: { mode: "icon", space: v.spaceId } });
   else if (it[1] === "worktree") openOverlay({ mod: "worktree", kind: "dialog", ...(it[2].action === "open" ? { width: 560, height: 480 } : { width: 440, height: 260 }), props: it[2] });
   else run(it[1], it[2]);
 }
@@ -169,6 +189,25 @@ function renderIcon(v, t, cx) {
   const chosen = choiceOf(s.id);
   const current = chosen === false ? "Letter" : typeof chosen === "string" ? chosen.split("/").pop() : "Automatic";
   const pick = (value) => { setChoice(s.id, value); close(); };
+  const tile = tileOf(s.id, t);
+  // The color row follows what the sidebar shows: the tile behind an icon, else the letter's color.
+  const showsIcon = chosen !== false && Boolean((shared("space.icons") ?? {})[s.id]);
+  const colorNow = showsIcon ? ((shared(TILE) ?? {})[s.id] ?? "#ffffff") : ((shared("space.colors") ?? {})[s.id] ?? "ansi6");
+  const swatch = (c, i) => div()
+    .id(`sis-${i}`)
+    .size(22)
+    .rounded(6)
+    .cursor_pointer()
+    .border_2()
+    .border_color(c === colorNow ? t.accent : t.popover)
+    .child(c === "none"
+      ? h_flex().size_full().rounded(4).border_1().border_color(t.border).items_center().justify_center().child(svg("mods/workspace-chrome/x.svg").size(11).text_color(t.dim))
+      : div().size_full().rounded(4).bg(hex(c, t)).when(c === "#ffffff" || c === "#1f2329", (el) => el.border_1().border_color(t.border)))
+    .tooltip(c === "none" ? "No tile" : c === "#ffffff" ? "White" : c === "#1f2329" ? "Dark" : "Herdr color")
+    .on_click((_e, cx) => { setIn(showsIcon ? TILE : "space.colors", s.id, c); cx.notify(); });
+  const colors = h_flex().gap(4).items_center()
+    .child(div().w(78).flex_none().text_color(t.dim).child(showsIcon ? "Background" : "Letter color"))
+    .children((showsIcon ? TILES : LETTERS).map(swatch));
   const grid = v.found === null
     ? div().text_color(t.dim).child("Looking for icons…")
     : v.found.length === 0
@@ -186,7 +225,7 @@ function renderIcon(v, t, cx) {
           .hover((st) => st.bg(t.hover))
           .tooltip(c.name)
           .on_click(() => pick(c.path))
-          .child(h_flex().size(40).rounded(8).overflow_hidden().bg("#ffffff").items_center().justify_center().child(image(c.rel).size(32)))
+          .child(h_flex().size(40).rounded(8).overflow_hidden().when(Boolean(tile), (b) => b.bg(tile)).items_center().justify_center().child(image(c.rel).size(tile ? 32 : 40)))
           .child(div().w_full().text_size(10.5).text_color(t.muted).truncate().child(c.name.split("/").pop()))));
   return v_flex()
     .id("spaces-icons-picker")
@@ -204,6 +243,7 @@ function renderIcon(v, t, cx) {
       .child(div().text_color(t.dim).child(`Now: ${current}. Click an icon to use it.`)))
     .child(v_flex().flex_1().min_h(0).id("sic-scroll").overflow_y_scroll().child(grid)
       .when(Boolean(v.more), (el) => el.child(div().pt(8).text_size(11).text_color(t.dim).child(`${v.more} more not shown. Use Choose file… for them.`))))
+    .child(colors)
     .child(h_flex().gap(8).items_center()
       .child(button("sib-auto", "Automatic", t, () => pick(undefined), chosen === undefined))
       .child(button("sib-letter", "Letter", t, () => pick(false), chosen === false))

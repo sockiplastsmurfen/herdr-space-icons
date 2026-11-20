@@ -71,6 +71,12 @@ Right-click a space and pick **Change icon…**. The dialog shows:
 - **Letter**: keep Herdr's letter and color.
 - **Choose file…**: any image, in the macOS file dialog. Only for spaces on
   this computer.
+- **Background** (with an icon): the tile behind it. Choose no tile, white
+  (the default), dark, or one of Herdr's six avatar colors.
+- **Letter color** (with the letter): one of Herdr's six avatar colors. It is
+  saved in Herdr's own `space.colors`, so the space picker shows it too.
+
+Colors apply at once, so you can try them with the dialog open.
 
 The choice is kept per space (Herdr's shared state `spaces-icons.choice`), so
 it survives renaming the space.
@@ -122,7 +128,8 @@ Herdr's own sidebar:
 - **Writes** copies of the icons to `~/.config/herdr-app/data/spaces-icons/`,
   because Herdr draws images only from its own folder.
 - **Keeps** choices from the icon dialog as `spaces-icons.choice` (space id to
-  a file path, or `false` for the letter).
+  a file path, or `false` for the letter) and `spaces-icons.tile` (space id to
+  a tile color). A letter color goes to Herdr's `space.colors`.
 - **Shares** the result as `space.icons` (space id to image path) in Herdr's
   shared state, so other mods can draw the same icons.
 - **No network access.**

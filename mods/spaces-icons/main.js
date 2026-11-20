@@ -7,7 +7,7 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, checking, props } from "herdr";
 import { findIcon, RESCAN } from "./icons.js";
-import { initOverlay, renderOverlay, openMenu, choiceOf } from "./picker.js";
+import { initOverlay, renderOverlay, openMenu, choiceOf, tileOf } from "./picker.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -532,7 +532,10 @@ export default class Spaces extends View {
           .gap(9)
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.dim)))
-          .when(!tree && Boolean(this.icons[w.id]), el => el.child(h_flex().size(18).flex_none().rounded(5).overflow_hidden().bg("#ffffff").items_center().justify_center().child(image(this.icons[w.id]).size(14))))
+          .when(!tree && Boolean(this.icons[w.id]), el => {
+            const tile = tileOf(w.id, t);
+            return el.child(h_flex().size(18).flex_none().rounded(5).overflow_hidden().when(Boolean(tile), (b) => b.bg(tile)).items_center().justify_center().child(image(this.icons[w.id]).size(tile ? 14 : 18)));
+          })
           .when(!tree && !this.icons[w.id], el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?")))
           .child(div().flex_initial().min_w(SIDE_MIN).truncate().text_color(t.foreground).child(w.name))
           .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1()),
