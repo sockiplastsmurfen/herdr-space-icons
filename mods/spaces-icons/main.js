@@ -5,8 +5,9 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
-import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, checking } from "herdr";
+import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, checking, props } from "herdr";
 import { findIcon, RESCAN } from "./icons.js";
+import { initOverlay, renderOverlay, openMenu, choiceOf } from "./picker.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -65,6 +66,8 @@ export function tone(t, status) {
 
 export default class Spaces extends View {
   init(_props, cx) {
+    // Opened as the space menu or the icon dialog, not as the sidebar.
+    if (props()?.mode) return initOverlay(this, cx);
     this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {}; // where() -> when it was last looked at
     this.unsure = new Set(); // where()s git couldn't answer for (a machine away)
@@ -157,9 +160,10 @@ export default class Spaces extends View {
     const todo = [];
     for (const s of sp) {
       if (s.name === "~") continue;
-      const key = JSON.stringify([s.name, where(s, ps)]);
+      const choice = choiceOf(s.id);
+      const key = JSON.stringify([s.name, where(s, ps), choice ?? null]);
       const last = this.iconLook[s.id];
-      if (!last || last.key !== key || now - last.at > RESCAN) todo.push({ s, key });
+      if (!last || last.key !== key || now - last.at > RESCAN) todo.push({ s, key, choice });
     }
     const ids = new Set(sp.map((s) => s.id));
     for (const id of Object.keys(this.iconLook)) if (!ids.has(id)) { delete this.iconLook[id]; delete this.icons[id]; }
@@ -168,9 +172,9 @@ export default class Spaces extends View {
     for (const { s, key } of todo) this.iconLook[s.id] = { key, at: now };
     cx.spawn(async (cx) => {
       let changed = false;
-      for (const { s, key } of todo) {
+      for (const { s, key, choice } of todo) {
         let icon = null;
-        try { icon = await findIcon(s.name, JSON.parse(JSON.parse(key)[1])[1], s.machine ?? null); }
+        try { icon = await findIcon(s.name, JSON.parse(JSON.parse(key)[1])[1], s.machine ?? null, choice); }
         catch { icon = this.icons[s.id] ?? null; } // the machine is away: keep what it showed
         if ((this.icons[s.id] ?? null) !== icon) { this.icons[s.id] = icon; changed = true; }
       }
@@ -323,7 +327,7 @@ export default class Spaces extends View {
 
   menu(w) {
     // A popup is as tall as its items; height is only the most.
-    openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } });
+    openMenu(w.id);
   }
 
   orderingDue(now) {
@@ -551,7 +555,8 @@ export default class Spaces extends View {
       .child(div().absolute().right(5).text_color(tone(t, w.status)).child(glyph(w.status))));
   }
 
-  render() {
+  render(cx) {
+    if (this.mode) return renderOverlay(this, cx);
     const t = theme();
     const collapsed = narrow();
     const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];

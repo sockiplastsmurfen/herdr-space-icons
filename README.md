@@ -22,12 +22,15 @@ keeps its letter and color, as before.
   can't be read: the space keeps Herdr's letter and color.
 - **Stays current.** It looks again when a space moves to another folder,
   and every 10 minutes.
+- **Lets you choose.** Right-click a space and pick **Change icon…** to choose
+  one of the icons found in the project, any image file, or the letter.
 - **Works on other machines.** For a space on another machine (`hc machine`),
   the icon is read there and copied to this computer.
 
 Everything else is Herdr's own Spaces sidebar, unchanged: worktrees nested
-under their repo, branch, ahead/behind, machines, drag to reorder and the
-right-click menu.
+under their repo, branch, ahead/behind, machines and drag to reorder. The
+right-click menu has Herdr's items (Rename, New/Open/Remove worktree, Close)
+plus **Change icon…**.
 
 ## Install
 
@@ -60,9 +63,21 @@ To go back, change the layout's mod back to `"spaces"` or switch layouts with
 
 ## Choose an icon yourself
 
-If it picks the wrong file, or you'd rather keep the letter for a space,
-create `~/.config/herdr-app/mods/spaces-icons/icons.json`. Use space names as
-keys:
+Right-click a space and pick **Change icon…**. The dialog shows:
+
+- **The icons found in the project**, as thumbnails (up to 12, wide logos
+  included). Click one to use it.
+- **Automatic**: go back to the icon it finds by itself.
+- **Letter**: keep Herdr's letter and color.
+- **Choose file…**: any image, in the macOS file dialog. Only for spaces on
+  this computer.
+
+The choice is kept per space (Herdr's shared state `spaces-icons.choice`), so
+it survives renaming the space.
+
+You can also set icons by hand in
+`~/.config/herdr-app/mods/spaces-icons/icons.json`, with space names as keys.
+A choice made in the dialog wins over this file:
 
 ```json
 {
@@ -102,10 +117,12 @@ Herdr's own sidebar:
 - **Runs** `sh` with a fixed script that calls `git rev-parse`, `stat` and a
   folder listing, plus `test`, `mkdir`, `cp`, `mv` and `rm`. It also uses
   `base64` for spaces on other machines and `sips` (macOS) to convert `.ico`
-  files and read image sizes.
+  files and read image sizes, and `osascript` for the file dialog (macOS).
 - **Reads** files only in the folders listed above, and its own `icons.json`.
 - **Writes** copies of the icons to `~/.config/herdr-app/data/spaces-icons/`,
   because Herdr draws images only from its own folder.
+- **Keeps** choices from the icon dialog as `spaces-icons.choice` (space id to
+  a file path, or `false` for the letter).
 - **Shares** the result as `space.icons` (space id to image path) in Herdr's
   shared state, so other mods can draw the same icons.
 - **No network access.**
@@ -115,6 +132,8 @@ Herdr's own sidebar:
 - Herdr desktop app, macOS or Linux.
 - `.ico` files need `sips`, so they are converted on macOS only. On Linux,
   `.ico` files are skipped and the next candidate is used.
+- **Choose file…** uses the macOS file dialog. Elsewhere, and for spaces on
+  other machines, pick from the found icons or use `icons.json`.
 - Icons over 512 KB are skipped.
 - The space picker (`picker`) still shows letters. It can read `space.icons`
   if you clone it too.

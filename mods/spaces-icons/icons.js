@@ -104,7 +104,7 @@ async function readOverrides() {
 
 // A copy of `path` (on machine `on`) under the app home, as a path image() takes,
 // or null if it couldn't be made. .ico becomes .png (sips, macOS only).
-async function materialize(on, path, stamp) {
+export async function materialize(on, path, stamp) {
   const ext = path.toLowerCase().split(".").pop();
   const outExt = ext === "ico" ? "png" : ext;
   const rel = `${DIR}/${hash(`${on ?? ""}|${path}|${stamp}`)}.${outExt}`;
@@ -132,30 +132,67 @@ async function materialize(on, path, stamp) {
   return r.code === 0 ? rel : null;
 }
 
+// The project's root and its candidates, best first: { root, list: [{ path, rel, stamp }] }.
+// Wide ones included: a person choosing may want them.
+export async function listCandidates(folder, on) {
+  if (!folder) return { root: null, list: [] };
+  const r = await exec("sh", ["-c", SCAN, "sh", folder], { on, timeout: 15000 });
+  if (r.code !== 0 || !r.stdout) return { root: null, list: [] };
+  const [root, ...lines] = r.stdout.split("\n").filter(Boolean);
+  const list = lines
+    .map((l) => {
+      const m = /^(\d+) (\d+) (.+)$/.exec(l);
+      return m && { stamp: `${m[1]} ${m[2]}`, size: Number(m[2]), rel: m[3], path: `${root}/${m[3]}` };
+    })
+    .filter((c) => c && c.size <= MAX_BYTES && score(c.rel) >= 0)
+    .sort((a, b) => score(b.rel) - score(a.rel));
+  return { root, list };
+}
+
+async function stampOf(on, path) {
+  const st = await exec("sh", ["-c", "stat -c '%Y %s' \"$1\" 2>/dev/null || stat -f '%m %z' \"$1\"", "sh", path], { on });
+  return st.code === 0 ? st.stdout.trim() : null;
+}
+
+// A chosen file (an absolute path on machine `on`) as a path image() takes, or null.
+export async function useFile(on, path) {
+  const stamp = await stampOf(on, path);
+  return stamp ? materialize(on, path, stamp) : null;
+}
+
 // The icon for a space at `folder` on machine `on`: a path under the app home,
-// or null for the letter and color.
-export async function findIcon(name, folder, on) {
+// or null for the letter and color. `choice`: what the person picked in the
+// space's menu (false: the letter, a path: that file), else icons.json, else the best found.
+export async function findIcon(name, folder, on, choice) {
+  if (choice === false) return null;
+  if (typeof choice === "string" && choice) {
+    const rel = await useFile(on, choice);
+    if (rel) return rel;
+  }
   if (!folder) return null;
   const o = (await readOverrides())[name];
   if (o === false) return null;
-  const r = await exec("sh", ["-c", SCAN, "sh", folder], { on, timeout: 15000 });
-  if (r.code !== 0 || !r.stdout) return null;
-  const [root, ...lines] = r.stdout.split("\n").filter(Boolean);
+  const { root, list } = await listCandidates(folder, on);
+  if (!root) return null;
   if (typeof o === "string" && o) {
-    const path = o.startsWith("/") ? o : `${root}/${o}`;
-    const st = await exec("sh", ["-c", "stat -c '%Y %s' \"$1\" 2>/dev/null || stat -f '%m %z' \"$1\"", "sh", path], { on });
-    if (st.code === 0) return materialize(on, path, st.stdout.trim());
+    const rel = await useFile(on, o.startsWith("/") ? o : `${root}/${o}`);
+    if (rel) return rel;
   }
-  const found = lines
-    .map((l) => {
-      const m = /^(\d+) (\d+) (.+)$/.exec(l);
-      return m && { stamp: `${m[1]} ${m[2]}`, size: Number(m[2]), path: m[3] };
-    })
-    .filter((c) => c && c.size <= MAX_BYTES && score(c.path) >= 0)
-    .sort((a, b) => score(b.path) - score(a.path));
-  for (const c of found.slice(0, 4)) {
-    const rel = await materialize(on, `${root}/${c.path}`, c.stamp);
+  for (const c of list.slice(0, 4)) {
+    const rel = await materialize(on, c.path, c.stamp);
     if (rel && squarish(await aspect(rel))) return rel;
   }
   return null;
+}
+
+// The system's file dialog for an image, on this Mac, starting in `folder`.
+// Resolves with the chosen path, or null (cancelled, or not macOS).
+const CHOOSE = `on run argv
+  activate
+  set f to choose file with prompt "Choose an icon for " & item 2 of argv of type {"public.image", "public.svg-image", "com.microsoft.ico"} default location (POSIX file (item 1 of argv))
+  return POSIX path of f
+end run`;
+export async function chooseFile(folder, name) {
+  const r = await exec("osascript", ["-e", CHOOSE, folder || "/", name], { timeout: 600000 }).catch(() => null);
+  return r && r.code === 0 && r.stdout.trim() ? r.stdout.trim() : null;
 }
